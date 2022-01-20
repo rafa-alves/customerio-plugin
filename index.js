@@ -36,7 +36,10 @@ export async function setupPlugin({ config, global }) {
                 if (eventNames.length > 0 && !eventNames.includes(event.event)) { 
                     continue
                 }
-                await exportToCustomerio(event, global.customerioAuthHeader)
+                if (event.event === '$identify' && event.$set?.$email)
+                    await exportPersonToCustomerio(event, global.customerioAuthHeader)
+                else 
+                    await exportToCustomerio(event, global.customerioAuthHeader)
             }
         }
     })
@@ -60,6 +63,24 @@ async function exportToCustomerio(event, authHeader) {
     )
 
     if (!statusOk(eventInsertResponse)) {
+        console.log(`Unable to send event ${event.event} to Customer.io`)
+    }
+}
+
+async function exportPersonToCustomerio(event, authHeader) {
+    const personInsertResponse = await fetchWithRetry(
+        `https://track.customer.io/api/v1/customers/${event.distinct_id}`,
+        {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                ...authHeader.headers
+            },
+            body: JSON.stringify({ email: event.$set.$email, name: event.$set.$name, ...event.$set })
+        },
+        'PUT'
+    )
+
+    if (!statusOk(personInsertResponse)) {
         console.log(`Unable to send event ${event.event} to Customer.io`)
     }
 }
