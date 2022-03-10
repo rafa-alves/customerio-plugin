@@ -36,10 +36,18 @@ export async function setupPlugin({ config, global }) {
                 if (eventNames.length > 0 && !eventNames.includes(event.event)) { 
                     continue
                 }
-                if (event.event === '$identify' && event.$set?.$email)
+
+                if (event.event === 'APP - Device Link') {
+                    exportPersonDesviceToCustomerio(event, global.customerioAuthHeader)
+                    continue
+                }
+
+                if (event.event === '$identify') {
                     await exportPersonToCustomerio(event, global.customerioAuthHeader)
-                else 
-                    await exportToCustomerio(event, global.customerioAuthHeader)
+                    continue
+                }
+                
+                await exportToCustomerio(event, global.customerioAuthHeader)
             }
         }
     })
@@ -68,6 +76,8 @@ async function exportToCustomerio(event, authHeader) {
 }
 
 async function exportPersonToCustomerio(event, authHeader) {
+    console.log(`Identify person ${event.distinct_id}`, event)
+
     const personInsertResponse = await fetchWithRetry(
         `https://track.customer.io/api/v1/customers/${event.distinct_id}`,
         {
@@ -76,6 +86,26 @@ async function exportPersonToCustomerio(event, authHeader) {
                 ...authHeader.headers
             },
             body: JSON.stringify({ email: event.$set.$email, name: event.$set.$name, ...event.$set })
+        },
+        'PUT'
+    )
+
+    if (!statusOk(personInsertResponse)) {
+        console.log(`Unable to send event ${event.event} to Customer.io`)
+    }
+}
+
+async function exportPersonDesviceToCustomerio(event, authHeader) {
+    console.log(`Identify person ${event.distinct_id}`, event)
+
+    const personInsertResponse = await fetchWithRetry(
+        `https://track.customer.io/api/v1/customers/${event.distinct_id}/devices`,
+        {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                ...authHeader.headers
+            },
+            body: JSON.stringify({ id: event.properties?.deviceToken, platform: event.properties?.$os_name?.toLowerCase() })
         },
         'PUT'
     )
